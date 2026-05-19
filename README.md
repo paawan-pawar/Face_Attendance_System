@@ -1,381 +1,276 @@
-Attendance Tracking System with Face Recognition
-A comprehensive college attendance tracking system that uses facial recognition technology to automate the attendance marking process. Students can register once and then mark their attendance simply by showing their face to the camera.
+# Attendance Tracking System with Face Recognition
 
-📋 Table of Contents
-Features
+A college attendance tracking system that uses face recognition to automate attendance marking. Students register once and then mark attendance by showing their face to the camera.
 
-System Requirements
+## Table of contents
 
-Installation
+- [Features](#features)
+- [System requirements](#system-requirements)
+- [Installation](#installation)
+- [Usage guide](#usage-guide)
+- [System architecture](#system-architecture)
+- [Project structure & generated files](#project-structure--generated-files)
+- [Troubleshooting](#troubleshooting)
+- [Future enhancements](#future-enhancements)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
+- [Contributors](#contributors)
+- [Support](#support)
+- [Version history](#version-history)
 
-Usage Guide
+## Features
 
-System Architecture
+### Student registration
 
-File Structure
+- Register students with details (Name, Enrollment No, Email, Phone, Course, Semester)
+- Capture a face sample from the webcam (press **SPACE** when your face is detected)
+- Automatic face detection using a Haar Cascade classifier (OpenCV)
+- Real-time feedback during capture
 
-Troubleshooting
+### Attendance management
 
-Future Enhancements
+- Mark attendance using real-time face recognition
+- Prevents duplicate attendance marking on the same day (enforced by the database)
+- Confidence-based recognition (default threshold: `0.6`)
+- Visual feedback during recognition (green = recognized, red = unknown/low confidence)
 
-License
+### Reporting & analytics
 
-✨ Features
-Student Registration
-Register students with detailed information (Name, Enrollment No, Email, Phone, Course, Semester)
+- View today's attendance in real-time
+- Filter attendance records by enrollment number and date range
+- Export attendance reports to CSV
+- View complete student list
 
-Capture and store multiple face samples (20 images) for better recognition accuracy
+### User interface
 
-Automatic face detection using Haar Cascade classifier
+- Tab-based GUI built with Tkinter
+- Real-time camera feed windows for registration and attendance
+- Multi-threaded attendance marking for smooth UI
 
-Real-time feedback during face capture
+## System requirements
 
-Attendance Management
-Mark attendance using real-time face recognition
+### Hardware
 
-LBPH (Local Binary Patterns Histograms) algorithm for face recognition
+- Webcam (built-in or external)
+- Minimum 4GB RAM (8GB recommended)
+- Disk space: starts small, grows as registrations increase
+- Processor: Intel Core i3 or equivalent (i5 recommended for better performance)
 
-Prevents duplicate attendance marking on the same day
+### Software
 
-Confidence-based recognition with 80% threshold
+- Windows 10/11, Linux, or macOS
+- Python 3.7+
 
-Visual feedback during recognition process
+## Installation
 
-Reporting & Analytics
-View today's attendance in real-time
+1) Create and activate a virtual environment (recommended):
 
-Filter attendance records by enrollment number and date range
+```bash
+python -m venv .venv
 
-Export attendance reports to CSV format
+# Windows (PowerShell)
+.\.venv\Scripts\Activate.ps1
 
-View complete student list
+# Linux/macOS
+source .venv/bin/activate
+```
 
-User Interface
-Tab-based intuitive GUI built with Tkinter
+2) Install dependencies:
 
-Real-time camera feed display
+```bash
+python -m pip install -r requirements.txt
+```
 
-Progress indicators and status messages
+Optional (alternative recognition backend):
 
-Multi-threaded operations for smooth user experience
+- If you install the `face_recognition` package, the app will use it automatically.
+- On Windows, installing `face_recognition` can require additional build tools (because it depends on `dlib`). If it’s not installed, the app falls back to an OpenCV LBPH-based recognizer.
 
-🖥️ System Requirements
-Hardware Requirements
-Webcam (built-in or external)
+## Usage guide
 
-Minimum 4GB RAM (8GB recommended)
+### Start the application
 
-100MB free disk space (increases with more student registrations)
-
-Processor: Intel Core i3 or equivalent (i5 recommended for better performance)
-
-Software Requirements
-Windows 10/11, Linux, or macOS
-
-Python 3.7 or higher
-
-Webcam drivers properly installed
-
-🚀 Usage Guide
-Starting the Application
-bash
+```bash
 python main_app.py
-1. Registering a New Student
-Navigate to the "Register Student" tab
+```
 
-Fill in all student details:
+### 1) Registering a new student
 
-Enrollment Number (unique identifier)
+1. Open the **Register Student** tab
+2. Fill all details:
+	- Enrollment Number (unique)
+	- Full Name
+	- Email Address
+	- Phone Number
+	- Course
+	- Semester (numeric)
+3. Click **Register Student & Capture Face**
+4. A camera window opens:
+	- Press **SPACE** to capture/register the face
+	- Press **Q** to quit without registering
 
-Full Name
+Tips for better capture:
 
-Email Address
+- Ensure good lighting
+- Look directly at the camera
+- Avoid glare (glasses can sometimes reduce detection quality)
 
-Phone Number
+### 2) Marking attendance
 
-Course Name
+1. Open the **Mark Attendance** tab
+2. Click **Mark Attendance (Face Recognition)**
+3. A camera window opens:
+	- Wait until you are recognized (green box + label)
+	- Press **SPACE** to mark attendance
+	- Press **Q** to exit
 
-Semester (numeric value)
+Notes:
 
-Click "Register Student & Capture Face"
+- The on-screen label shows the recognized student and a confidence score (0–1).
+- If attendance for the same enrollment is already marked for today, the database will block duplicates.
 
-Position your face clearly in front of the camera
+### 3) Viewing attendance records
 
-Press SPACE to capture face images (20 images needed)
+1. Open the **View Attendance** tab
+2. (Optional) Set filters:
+	- Enrollment Number
+	- Start Date (`YYYY-MM-DD`)
+	- End Date (`YYYY-MM-DD`)
+3. Click **Apply Filters**
+4. Click **Export to CSV** to save a report in the project folder
 
-Press Q to quit early if needed
+### 4) Viewing the student list
 
-Wait for model training to complete
+- Open the **Student List** tab
+- Click **Refresh** to reload
 
-Tips for Face Capture:
+## System architecture
 
-Ensure good lighting conditions
+### Components
 
-Look directly at the camera
+- `main_app.py`: Tkinter GUI (tabs for registration, attendance, reports, student list)
+- `database.py`: SQLite database operations (students + attendance tables)
+- `face_recognizer.py`: Face detection/recognition logic
 
-Vary your head position slightly between captures
+### Database schema
 
-Remove glasses if they cause glare
+**Students**
 
-Keep a neutral facial expression
+- `enrollment_no` is unique
 
-2. Marking Attendance
-Navigate to the "Mark Attendance" tab
+**Attendance**
 
-Click "Mark Attendance (Face Recognition)"
+- Unique constraint on `(enrollment_no, date)` prevents duplicates for the same day
 
-Position your face clearly in front of the camera
+### Recognition backend
 
-Wait for the system to recognize you (shown by green box and name)
+The app supports two recognition backends:
 
-Press SPACE to mark attendance
+1) **`face_recognition` backend (if installed)**
 
-Look for confirmation message
+- Uses face encodings and distance-based matching
+- Stores encodings in `face_encodings.pkl`
 
-Press Q to exit camera mode
+2) **OpenCV LBPH backend (default fallback)**
 
-Recognition Confidence:
+- Face detection: Haar cascade from OpenCV
+- Recognition: LBPH (`cv2.face.LBPHFaceRecognizer_create`)
+- Stores face samples in `face_data/` and label mappings in `face_data/labels.json`
 
-Green box: Recognized with >80% confidence
+Default recognition threshold: `0.6` (higher = stricter).
 
-Red box: Unknown or low confidence (<80%)
+## Project structure & generated files
 
-Wait for stable recognition before marking attendance
+### Project files
 
-3. Viewing Attendance Records
-Today's Attendance:
-
-Automatically displayed in the "Mark Attendance" tab
-
-Shows all students who marked attendance today with timestamps
-
-Historical Reports:
-
-Navigate to "View Attendance" tab
-
-Apply filters (optional):
-
-Enrollment Number
-
-Start Date (YYYY-MM-DD)
-
-End Date (YYYY-MM-DD)
-
-Click "Apply Filters" to view results
-
-Click "Export to CSV" to download report
-
-4. Managing Students
-View all registered students in the "Student List" tab
-
-See enrollment numbers, names, courses, and semesters
-
-Click "Refresh" to update the list
-
-🏗️ System Architecture
-Components
-text
+```text
 attendance_system/
-│
-├── main_app.py           # Main GUI application
-├── database.py           # SQLite database operations
-├── face_recognizer.py    # Face detection & recognition logic
-├── training_data/        # Stored face images (auto-created)
-├── attendance_system.db  # SQLite database (auto-created)
-├── face_recognizer.yml   # Trained model (auto-created)
-└── face_labels.pkl       # Label mappings (auto-created)
-Database Schema
-Students Table:
+├── main_app.py
+├── database.py
+├── face_recognizer.py
+├── requirements.txt
+└── face_data/
+	 └── labels.json
+```
 
-id (Primary Key)
+### Auto-generated files (created at runtime)
 
-enrollment_no (Unique)
+- `attendance_system.db`: SQLite database
+- `attendance_report_*.csv`: Exported attendance reports
+- `face_encodings.pkl`: Only when using the `face_recognition` backend
+- `face_data/*.png`: Face samples saved by the OpenCV backend
 
-name
+## Troubleshooting
 
-email
+### Camera not working
 
-phone
+Symptoms:
 
-course
+- Camera window is black or the webcam can’t be opened
 
-semester
+Fixes:
 
-registration_date
+- Close other apps that may be using the camera
+- Check OS camera permissions
+- Try reconnecting the webcam / restarting the app
 
-Attendance Table:
+### `ModuleNotFoundError: No module named 'cv2'`
 
-id (Primary Key)
+```bash
+python -m pip install -r requirements.txt
+```
 
-enrollment_no (Foreign Key)
+### OpenCV LBPH not available (`cv2.face` missing)
 
-date
+- This requires **opencv-contrib**.
 
-time
+```bash
+python -m pip install opencv-contrib-python
+```
 
-status
+### Low recognition confidence
 
-Recognition Algorithm
-The system uses LBPH (Local Binary Patterns Histograms) for face recognition:
+- Improve lighting and keep your face centered
+- Re-register the student with a clearer capture (if you change the code to capture multiple samples, accuracy improves further)
+- Increase/decrease the threshold by changing `confidence_threshold` in `FaceRecognizer.mark_attendance`
 
-Converts faces to grayscale
+### NumPy / Pandas compatibility issues
 
-Extracts local binary patterns
+If you see binary or import errors, reinstall pinned versions:
 
-Creates histograms for comparison
+```bash
+python -m pip uninstall numpy pandas -y
+python -m pip install numpy==1.24.3 pandas==2.0.3
+```
 
-Uses Euclidean distance for matching
+## Future enhancements
 
-Confidence threshold: 80%
+- Multiple face detection for batch attendance
+- Anti-spoofing detection (prevent photo attacks)
+- Dashboard with analytics and charts
+- Email/SMS notifications for absent students
+- Cloud backup and synchronization
 
-Face Detection
-Uses Haar Cascade Classifier:
+## License
 
-Pre-trained model from OpenCV
+MIT License.
 
-Fast and efficient for real-time detection
+## Acknowledgments
 
-Scale factor: 1.1
+- OpenCV team (computer vision libraries)
+- Tkinter (GUI framework)
+- SQLite (lightweight embedded database)
 
-Minimum neighbors: 5
+## Contributors
 
-Minimum face size: 30x30 pixels
+- Paawan Pawar
 
-🔧 Troubleshooting
-Common Issues and Solutions
-1. Camera Not Working
-bash
-Error: Could not open webcam
-Solutions:
+## Support
 
-Check if camera is properly connected
+- Open an issue on GitHub
+- Contact: paaw4nnn.2005@gmail.com
 
-Close other applications using the camera
+## Version history
 
-Check camera permissions in system settings
-
-Try restarting the application
-
-2. Face Not Detected
-Solutions:
-
-Ensure adequate lighting
-
-Position face directly in front of camera
-
-Remove obstacles (glasses, masks, hats)
-
-Move closer to camera
-
-3. Low Recognition Confidence
-Solutions:
-
-Re-register with better quality images
-
-Capture images in good lighting
-
-Train with more varied head poses
-
-Increase confidence threshold in code (default: 80)
-
-4. Import Errors
-bash
-ModuleNotFoundError: No module named 'cv2'
-Solution: Reinstall OpenCV
-
-bash
-pip uninstall opencv-python
-pip install opencv-python
-5. Database Errors
-Solution: Delete database file and restart
-
-bash
-del attendance_system.db  # Windows
-rm attendance_system.db   # Linux/Mac
-6. NumPy Compatibility Issues
-Solution: Install compatible versions
-
-bash
-pip uninstall numpy pandas -y
-pip install numpy==1.24.3 pandas==2.0.3
-Performance Optimization Tips
-Recognition Speed:
-
-Reduce captured image size (currently 100x100)
-
-Use better lighting for faster detection
-
-Close unnecessary background applications
-
-Storage Management:
-
-Training data folder grows with each registration
-
-Archive old attendance records periodically
-
-Delete training data for deregistered students
-
-Accuracy Improvements:
-
-Capture 20-30 images per student
-
-Use consistent lighting conditions
-
-Train model after each new registration
-
-🚀 Future Enhancements
-Potential features to add:
-
-Multiple face detection for batch attendance
-
-Anti-spoofing detection (prevent photo attacks)
-
-Mobile app integration
-
-Email/SMS notifications for absent students
-
-Dashboard with analytics and charts
-
-QR code backup attendance method
-
-Cloud backup and synchronization
-
-Parent/guardian portal
-
-Automated report generation
-
-Voice feedback for visually impaired
-
-📝 License
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-👥 Contributors
-Your Name - Paawan Pawar
-
-🙏 Acknowledgments
-OpenCV team for computer vision libraries
-
-Tkinter for GUI framework
-
-SQLite for lightweight database
-
-📞 Support
-For issues, questions, or contributions:
-
-Open an issue on GitHub
-
-Contact: [paaw4nnn.2005@gmail.com]
-
-📊 Version History
-v1.0.0 (Current)
-
-Initial release
-
-Basic face recognition attendance
-
-Student registration
-
-Attendance reporting
-
-Made by Paawan for educational purpose
+- v1.0.0 — Initial release (basic registration, face-based attendance, reporting)
 
