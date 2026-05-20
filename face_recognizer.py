@@ -1,4 +1,8 @@
-import cv2
+try:
+    import cv2  # type: ignore
+except ModuleNotFoundError as e:
+    cv2 = None
+    _CV2_IMPORT_ERROR = e
 import numpy as np
 import os
 import pickle
@@ -13,7 +17,12 @@ except ModuleNotFoundError as e:
 
 class FaceRecognizer:
     def __init__(self):
-        self.backend = "face_recognition" if face_recognition is not None else "opencv_lbph"
+        if face_recognition is not None:
+            self.backend = "face_recognition"
+        elif cv2 is not None:
+            self.backend = "opencv_lbph"
+        else:
+            self.backend = "unavailable"
 
         self.known_face_encodings = []
         self.known_face_names = []
@@ -31,10 +40,13 @@ class FaceRecognizer:
 
         if self.backend == "face_recognition":
             self.load_encodings()
-        else:
+        elif self.backend == "opencv_lbph":
             self._ensure_opencv_backend_ready()
             self._load_opencv_labels()
             self._train_opencv_model()
+        else:
+            # Neither OpenCV nor face_recognition is available.
+            pass
 
     def _ensure_face_recognition_available(self) -> bool:
         if face_recognition is not None:
@@ -50,6 +62,14 @@ class FaceRecognizer:
         return False
 
     def _ensure_opencv_backend_ready(self) -> bool:
+        if cv2 is None:
+            print(
+                "OpenCV is not installed, so the OpenCV LBPH backend is unavailable.\n"
+                "Install dependencies with: python -m pip install -r requirements.txt\n"
+                f"Original error: {_CV2_IMPORT_ERROR}"
+            )
+            return False
+
         os.makedirs(self.face_data_dir, exist_ok=True)
 
         # Haar cascade for face detection (ships with OpenCV)
@@ -147,21 +167,220 @@ class FaceRecognizer:
         if not self._ensure_opencv_backend_ready():
             return []
 
-        # returns list of (x, y, w, h)
-        faces = self._haar_cascade.detectMultiScale(
-            gray_frame,
-            scaleFactor=1.1,
-            minNeighbors=5,
-            minSize=(80, 80)
-        )
-        return faces
+        if gray_frame is None:
+            return []
+
+        h, w = gray_frame.shape[:2]
+        # Heuristic: allow smaller faces (Streamlit snapshots are often lower-res)
+        min_side = max(40, int(min(h, w) * 0.12))
+
+        # Improve contrast for Haar detection
+        try:
+            gray_eq = cv2.equalizeHist(gray_frame)
+        except Exception:
+            gray_eq = gray_frame
+
+        faces_all = []
+        for gray in (gray_frame, gray_eq):
+            for scale_factor, min_neighbors in ((1.1, 5), (1.05, 4)):
+                try:
+                    faces = self._haar_cascade.detectMultiScale(
+                        gray,
+                        scaleFactor=scale_factor,
+                        minNeighbors=min_neighbors,
+                        minSize=(min_side, min_side),
+                    )
+                except Exception:
+                    faces = []
+                if len(faces) > 0:
+                    faces_all.extend(list(faces))
+
+        return faces_all
 
     def _preprocess_face_roi(self, gray_frame, x, y, w, h):
-        roi = gray_frame[y:y + h, x:x + w]
+        # Add padding so we don't crop too tightly.
+        pad_x = int(w * 0.20)
+        pad_y = int(h * 0.20)
+        x0 = max(int(x - pad_x), 0)
+        y0 = max(int(y - pad_y), 0)
+        x1 = min(int(x + w + pad_x), gray_frame.shape[1])
+        y1 = min(int(y + h + pad_y), gray_frame.shape[0])
+
+        roi = gray_frame[y0:y1, x0:x1]
         if roi.size == 0:
             return None
         roi = cv2.resize(roi, (200, 200))
+        try:
+            roi = cv2.equalizeHist(roi)
+        except Exception:
+            pass
         return roi
+
+    def detect_faces_from_image(self, rgb_image):
+        """Detect faces in a single RGB image.
+
+        Returns list of (top, right, bottom, left).
+        """
+        if rgb_image is None:
+            return []
+
+        if self.backend == "face_recognition":
+            if not self._ensure_face_recognition_available():
+                return []
+            return list(face_recognition.face_locations(rgb_image))
+
+        if self.backend != "opencv_lbph":
+            return []
+
+        if not self._ensure_opencv_backend_ready():
+            return []
+
+        gray = self._rgb_to_gray(rgb_image)
+        faces = self._detect_faces_opencv(gray)
+        # Convert (x, y, w, h) -> (top, right, bottom, left)
+        return [(int(y), int(x + w), int(y + h), int(x)) for (x, y, w, h) in faces]
+
+    def _pick_largest_face(self, face_locations):
+        """Pick the largest face from a list of (top, right, bottom, left)."""
+        if not face_locations:
+            return None
+        return max(face_locations, key=lambda b: max((b[2] - b[0]), 0) * max((b[1] - b[3]), 0))
+
+    def _rgb_to_gray(self, rgb_img):
+        if cv2 is None:
+            return None
+        if rgb_img is None:
+            return None
+        if len(rgb_img.shape) == 2:
+            return rgb_img
+        if rgb_img.shape[-1] == 3:
+            return cv2.cvtColor(rgb_img, cv2.COLOR_RGB2GRAY)
+        if rgb_img.shape[-1] == 4:
+            return cv2.cvtColor(rgb_img, cv2.COLOR_RGBA2GRAY)
+        return cv2.cvtColor(rgb_img, cv2.COLOR_RGB2GRAY)
+
+    def register_face_from_image(self, name, enrollment_no, rgb_image):
+        """Register a face from a single RGB image (Streamlit-friendly)."""
+        if self.backend == "face_recognition":
+            if not self._ensure_face_recognition_available():
+                return False
+        else:
+            if not self._ensure_opencv_backend_ready():
+                return False
+
+        if rgb_image is None:
+            return False
+
+        if self.backend == "face_recognition":
+            face_locations = face_recognition.face_locations(rgb_image)
+            chosen = self._pick_largest_face(face_locations)
+            if chosen is None:
+                return False
+            encodings = face_recognition.face_encodings(rgb_image, [chosen])
+            if not encodings:
+                return False
+
+            self.known_face_encodings.append(encodings[0])
+            self.known_face_names.append(name)
+            self.known_face_enrollments.append(enrollment_no)
+            self.save_encodings()
+            return True
+
+        # OpenCV LBPH backend
+        self._load_opencv_labels()
+        gray = self._rgb_to_gray(rgb_image)
+        if gray is None:
+            return False
+        faces = self._detect_faces_opencv(gray)
+        if len(faces) == 0:
+            return False
+
+        # Pick largest detected face
+        x, y, w, h = max(faces, key=lambda b: b[2] * b[3])
+        roi = self._preprocess_face_roi(gray, x, y, w, h)
+        if roi is None:
+            return False
+
+        # Assign label for this enrollment if new
+        if enrollment_no in self._student_to_label:
+            label = self._student_to_label[enrollment_no]
+        else:
+            label = (max(self._label_to_student.keys()) + 1) if self._label_to_student else 0
+            self._label_to_student[label] = (name, enrollment_no)
+            self._student_to_label[enrollment_no] = label
+            self._save_opencv_labels()
+
+        safe_enrollment = ''.join(c for c in str(enrollment_no) if c.isalnum() or c in ('-', '_'))
+        safe_name = ''.join(c for c in str(name) if c.isalnum() or c in ('-', '_'))
+        filename = f"{safe_enrollment}_{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        path = os.path.join(self.face_data_dir, filename)
+        cv2.imwrite(path, roi)
+
+        self._train_opencv_model()
+        return True
+
+    def recognize_from_image(self, rgb_image, confidence_threshold=0.6):
+        """Recognize a student from a single RGB image.
+
+        Returns:
+            (name, enrollment_no, confidence) if recognized, else None
+        """
+        if rgb_image is None:
+            return None
+
+        if self.backend == "face_recognition":
+            if not self._ensure_face_recognition_available():
+                return None
+            if len(self.known_face_encodings) == 0:
+                return None
+
+            face_locations = face_recognition.face_locations(rgb_image)
+            chosen = self._pick_largest_face(face_locations)
+            if chosen is None:
+                return None
+            encodings = face_recognition.face_encodings(rgb_image, [chosen])
+            if not encodings:
+                return None
+            face_encoding = encodings[0]
+
+            distances = face_recognition.face_distance(self.known_face_encodings, face_encoding)
+            best_match_index = int(np.argmin(distances))
+            confidence = float(1 - distances[best_match_index])
+            if confidence < confidence_threshold:
+                return None
+            return (
+                self.known_face_names[best_match_index],
+                self.known_face_enrollments[best_match_index],
+                confidence,
+            )
+
+        # OpenCV LBPH backend
+        if not self._ensure_opencv_backend_ready():
+            return None
+        self._load_opencv_labels()
+        self._train_opencv_model()
+
+        gray = self._rgb_to_gray(rgb_image)
+        if gray is None:
+            return None
+        faces = self._detect_faces_opencv(gray)
+        if len(faces) == 0:
+            return None
+        x, y, w, h = max(faces, key=lambda b: b[2] * b[3])
+        roi = self._preprocess_face_roi(gray, x, y, w, h)
+        if roi is None or self._lbph_model is None:
+            return None
+
+        try:
+            pred_label, distance = self._lbph_model.predict(roi)
+        except Exception:
+            return None
+
+        confidence = float(np.exp(-max(float(distance), 0.0) / 80.0))
+        if pred_label in self._label_to_student and confidence >= confidence_threshold:
+            name, enrollment = self._label_to_student[pred_label]
+            return (name, enrollment, confidence)
+        return None
     
     def load_encodings(self):
         """Load existing face encodings from file"""
@@ -191,6 +410,13 @@ class FaceRecognizer:
     
     def register_face(self, name, enrollment_no):
         """Register a new face by capturing from webcam"""
+        if cv2 is None:
+            print(
+                "OpenCV (cv2) is required for webcam capture, but it's not installed.\n"
+                "Install dependencies with: python -m pip install -r requirements.txt"
+            )
+            return False
+
         if self.backend == "face_recognition":
             if not self._ensure_face_recognition_available():
                 return False
@@ -304,6 +530,13 @@ class FaceRecognizer:
     
     def mark_attendance(self, database, confidence_threshold=0.6):
         """Mark attendance by recognizing face"""
+        if cv2 is None:
+            print(
+                "OpenCV (cv2) is required for webcam attendance marking, but it's not installed.\n"
+                "Install dependencies with: python -m pip install -r requirements.txt"
+            )
+            return False
+
         if self.backend == "face_recognition":
             if not self._ensure_face_recognition_available():
                 return False
@@ -317,14 +550,17 @@ class FaceRecognizer:
 
         video_capture = cv2.VideoCapture(0)
         print("Press 'q' to quit, 'Space' to mark attendance")
-        
-        recognized_student = None
-        recognition_confidence = 0
+
+        attendance_marked = False
         
         while True:
             ret, frame = video_capture.read()
             if not ret:
                 break
+
+            # Recompute the best recognized student for the *current* frame
+            recognized_student = None
+            recognition_confidence = 0.0
             
             face_names = []
             face_confidence = []
@@ -351,7 +587,7 @@ class FaceRecognizer:
                             face_names.append(f"{name} ({enrollment})")
                             face_confidence.append(confidence)
 
-                            if recognized_student is None:
+                            if confidence > recognition_confidence:
                                 recognized_student = (name, enrollment)
                                 recognition_confidence = confidence
                         else:
@@ -391,7 +627,7 @@ class FaceRecognizer:
                         face_names.append(f"{name} ({enrollment})")
                         face_confidence.append(confidence)
 
-                        if recognized_student is None:
+                        if confidence > recognition_confidence:
                             recognized_student = (name, enrollment)
                             recognition_confidence = confidence
                     else:
@@ -430,14 +666,24 @@ class FaceRecognizer:
                     name, enrollment = recognized_student
                     success, message = database.mark_attendance(enrollment)
                     print(f"Attendance for {name}: {message}")
+                    attendance_marked = bool(success)
                     
                     # Show confirmation
                     confirmation_frame = frame.copy()
-                    cv2.putText(confirmation_frame, message, (10, 100), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                    color = (0, 255, 0) if success else (0, 0, 255)
+                    cv2.putText(
+                        confirmation_frame,
+                        message,
+                        (10, 100),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        color,
+                        2,
+                    )
                     cv2.imshow('Mark Attendance', confirmation_frame)
                     cv2.waitKey(2000)
-                    break
+                    if success:
+                        break
                 else:
                     print("No recognized face detected!")
             
@@ -446,4 +692,4 @@ class FaceRecognizer:
         
         video_capture.release()
         cv2.destroyAllWindows()
-        return recognized_student is not None
+        return attendance_marked

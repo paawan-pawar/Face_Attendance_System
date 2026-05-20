@@ -1,4 +1,7 @@
-opencv-contrib-python==4.8.1.78
-numpy==1.24.3
-pandas==2.0.3
-Pillow==10.0.0
+opencv-contrib-python>=4.8,<5; platform_system=="Windows"
+opencv-contrib-python-headless>=4.8,<5; platform_system!="Windows"
+numpy>=1.26,<3
+pandas>=2.2,<3
+Pillow>=10,<12
+streamlit>=1.33,<2
+streamlit-webrtc>=0.63,<1

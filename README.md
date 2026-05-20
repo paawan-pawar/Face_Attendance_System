@@ -94,6 +94,27 @@ Optional (alternative recognition backend):
 python main_app.py
 ```
 
+### Streamlit UI (deployable)
+
+This repo also includes a Streamlit UI that works on Streamlit Community Cloud.
+
+Run locally:
+
+```bash
+streamlit run streamlit_app.py
+```
+
+Deploy on Streamlit Community Cloud:
+
+- App repo: point Streamlit to this GitHub repository
+- Main file path: `streamlit_app.py`
+
+Notes:
+
+- Streamlit uses snapshot-based capture (`st.camera_input`) rather than an always-on webcam window.
+- For a webcam experience closer to the Tkinter app, the Streamlit UI supports **Live (recommended)** capture using WebRTC (`streamlit-webrtc`).
+- Data is stored locally in `attendance_system.db` and face samples in `face_data/`. On Streamlit Cloud, this storage may be ephemeral across redeploys.
+
 ### 1) Registering a new student
 
 1. Open the **Register Student** tab

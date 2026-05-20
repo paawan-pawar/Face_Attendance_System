@@ -18,6 +18,13 @@ ENV/
 *.sqlite
 *.sqlite3
 
+# Face recognition runtime artifacts
+face_data/*.png
+face_data/*.jpg
+face_data/*.jpeg
+face_data/labels.json
+face_encodings.pkl
+
 # Tooling caches
 .pytest_cache/
 .mypy_cache/
